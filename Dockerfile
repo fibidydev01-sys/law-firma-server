@@ -1,5 +1,5 @@
 # ============================================================================
-# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION (WORKING VERSION)
+# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION (SIMPLIFIED)
 # ============================================================================
 
 FROM node:20-alpine AS builder
@@ -14,7 +14,7 @@ WORKDIR /app
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
-# Copy prisma schema FIRST (before installing deps)
+# Copy prisma schema FIRST
 COPY prisma ./prisma/
 
 # Configure pnpm registry
@@ -23,7 +23,7 @@ RUN pnpm config set registry https://registry.npmmirror.com/
 # Install ALL dependencies
 RUN pnpm install --frozen-lockfile
 
-# Generate Prisma Client BEFORE building
+# Generate Prisma Client
 RUN pnpm exec prisma generate
 
 # Copy source code
@@ -54,15 +54,11 @@ COPY --from=builder /app/prisma ./prisma/
 # Configure pnpm
 RUN pnpm config set registry https://registry.npmmirror.com/
 
-# Install production dependencies
+# Install production dependencies (including @prisma/client)
 RUN pnpm install --prod --frozen-lockfile
 
-# Generate Prisma Client in production
+# Generate Prisma Client (fresh in production)
 RUN pnpm exec prisma generate
-
-# Copy Prisma client from builder (as backup - ini yang penting!)
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Copy built application
 COPY --from=builder /app/dist ./dist/

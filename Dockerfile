@@ -42,8 +42,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install OpenSSL and wget only (NO pnpm needed here!)
-RUN apk add --no-cache openssl wget
+# Install pnpm, OpenSSL and wget
+RUN npm config set registry https://registry.npmmirror.com/ \
+  && npm install -g pnpm@9.12.2 \
+  && apk add --no-cache openssl wget
 
 # Copy package files
 COPY package*.json pnpm-lock.yaml ./
@@ -79,5 +81,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
 
-# Start application with migrations
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/src/main.js"]
+# Start application with migrations and proper error handling
+CMD ["sh", "-c", "echo 'Starting Prisma migration...' && npx prisma db push --accept-data-loss --skip-generate && echo 'Migration complete. Starting application...' && node dist/src/main.js"]

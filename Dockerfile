@@ -1,72 +1,88 @@
 # ============================================================================
-# DOCKERFILE - Firma Hukum PERARI Backend
-# Optimized for Development with pnpm + Docker Layer Caching
-# STRATEGY: Install as node user from the start (no chown needed!)
+# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION
 # ============================================================================
 
-FROM node:20-alpine
+FROM node:20-alpine AS builder
 
-# Install pnpm directly (skip corepack to avoid network issues)
+# Install pnpm
 RUN npm config set registry https://registry.npmmirror.com/ \
-    && npm install -g pnpm@9.12.2
+  && npm install -g pnpm@9.12.2
 
-# Install system dependencies for Prisma & health checks
+# Install build dependencies
 RUN apk add --no-cache openssl wget bash
-
-# Create app directory with correct ownership from the start
-RUN mkdir -p /app && chown -R node:node /app
-
-# Switch to node user BEFORE any work
-USER node
 
 WORKDIR /app
 
-# ============================================================================
-# LAYER 1: Dependencies (paling jarang berubah = cache layer terbaik)
-# ============================================================================
-COPY --chown=node:node package.json pnpm-lock.yaml ./
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
 
-# Configure pnpm to use npmmirror registry
+# Configure pnpm
 RUN pnpm config set registry https://registry.npmmirror.com/
 
-# Install ALL dependencies (as node user, no permission issues)
+# Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# ============================================================================
-# LAYER 2: Prisma (berubah kalau schema berubah)
-# ============================================================================
-COPY --chown=node:node prisma ./prisma/
+# Copy prisma
+COPY prisma ./prisma/
 
 # Generate Prisma Client
 RUN pnpm prisma generate
 
-# ============================================================================
-# LAYER 3: Source code (paling sering berubah)
-# ============================================================================
-# Copy source files
-COPY --chown=node:node src ./src/
+# Copy source
+COPY src ./src/
+COPY tsconfig.json tsconfig.build.json nest-cli.json .prettierrc ./
 
-# Copy config files
-COPY --chown=node:node tsconfig.json tsconfig.build.json nest-cli.json .prettierrc ./
+# Build application
+RUN pnpm run build
 
 # ============================================================================
-# LAYER 4: Runtime setup
+# PRODUCTION STAGE
 # ============================================================================
-# Create necessary directories (already owned by node)
+FROM node:20-alpine
+
+# Install runtime dependencies
+RUN npm config set registry https://registry.npmmirror.com/ \
+  && npm install -g pnpm@9.12.2 \
+  && apk add --no-cache openssl wget bash
+
+# Create app directory
+RUN mkdir -p /app && chown -R node:node /app
+
+USER node
+WORKDIR /app
+
+# Copy package files
+COPY --chown=node:node package.json pnpm-lock.yaml ./
+
+# Configure pnpm
+RUN pnpm config set registry https://registry.npmmirror.com/
+
+# Install production dependencies only
+RUN pnpm install --prod --frozen-lockfile
+
+# Copy prisma
+COPY --chown=node:node --from=builder /app/prisma ./prisma/
+
+# Generate Prisma Client
+RUN pnpm prisma generate
+
+# Copy built application
+COPY --chown=node:node --from=builder /app/dist ./dist/
+
+# Create runtime directories
 RUN mkdir -p \
-    uploads/dokumen \
-    uploads/avatars \
-    uploads/documents \
-    uploads/temp \
-    logs \
-    backups/redis
+  uploads/dokumen \
+  uploads/avatars \
+  uploads/documents \
+  uploads/temp \
+  logs \
+  backups/redis
 
-# Expose application port
 EXPOSE 3000
 
-# Health check for container orchestration
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
 
-# Start application in development mode with hot reload
-CMD ["pnpm", "run", "start:dev"]
+# Start in production mode
+CMD ["pnpm", "run", "start:prod"]

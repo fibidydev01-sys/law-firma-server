@@ -1,31 +1,29 @@
 # ============================================================================
-# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION (FIXED v2)
+# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION (WORKING VERSION)
 # ============================================================================
 
 FROM node:20-alpine AS builder
 
-# Install pnpm
+# Install pnpm and build dependencies
 RUN npm config set registry https://registry.npmmirror.com/ \
-  && npm install -g pnpm@9.12.2
-
-# Install build dependencies
-RUN apk add --no-cache openssl wget bash
+  && npm install -g pnpm@9.12.2 \
+  && apk add --no-cache openssl wget bash
 
 WORKDIR /app
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
-# Configure pnpm
-RUN pnpm config set registry https://registry.npmmirror.com/
-
-# Install ALL dependencies (including prisma)
-RUN pnpm install --frozen-lockfile
-
-# Copy prisma schema AFTER installing dependencies
+# Copy prisma schema FIRST (before installing deps)
 COPY prisma ./prisma/
 
-# Generate Prisma Client (now prisma CLI is available)
+# Configure pnpm registry
+RUN pnpm config set registry https://registry.npmmirror.com/
+
+# Install ALL dependencies
+RUN pnpm install --frozen-lockfile
+
+# Generate Prisma Client BEFORE building
 RUN pnpm exec prisma generate
 
 # Copy source code
@@ -45,44 +43,51 @@ RUN npm config set registry https://registry.npmmirror.com/ \
   && npm install -g pnpm@9.12.2 \
   && apk add --no-cache openssl wget bash
 
-# Create app directory
-RUN mkdir -p /app && chown -R node:node /app
-
-USER node
 WORKDIR /app
 
 # Copy package files
-COPY --chown=node:node package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml ./
 
-# Copy prisma schema
-COPY --chown=node:node prisma ./prisma/
+# Copy Prisma schema
+COPY --from=builder /app/prisma ./prisma/
 
 # Configure pnpm
 RUN pnpm config set registry https://registry.npmmirror.com/
 
-# Install production dependencies (including @prisma/client)
+# Install production dependencies
 RUN pnpm install --prod --frozen-lockfile
 
-# Generate Prisma Client in production stage
+# Generate Prisma Client in production
 RUN pnpm exec prisma generate
 
+# Copy Prisma client from builder (as backup - ini yang penting!)
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
 # Copy built application
-COPY --chown=node:node --from=builder /app/dist ./dist/
+COPY --from=builder /app/dist ./dist/
 
 # Create runtime directories
 RUN mkdir -p \
-  uploads/dokumen \
-  uploads/avatars \
-  uploads/documents \
-  uploads/temp \
-  logs \
-  backups/redis
+  /app/uploads/dokumen \
+  /app/uploads/avatars \
+  /app/uploads/documents \
+  /app/uploads/temp \
+  /app/logs \
+  /app/backups/redis
 
+# Set ownership
+RUN chown -R node:node /app
+
+# Switch to node user
+USER node
+
+# Expose port
 EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
 
-# Start in production mode
-CMD ["pnpm", "run", "start:prod"]
+# Start application with migrations
+CMD ["sh", "-c", "pnpm exec prisma db push --accept-data-loss && node dist/src/main.js"]

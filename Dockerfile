@@ -1,5 +1,5 @@
 # ============================================================================
-# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION (PNPM VERSION)
+# DOCKERFILE - Firma Hukum PERARI Backend - OPTIMIZED
 # ============================================================================
 
 # Build stage
@@ -21,10 +21,10 @@ COPY prisma ./prisma/
 # Configure pnpm
 RUN pnpm config set registry https://registry.npmmirror.com/
 
-# Install dependencies
+# Install ALL dependencies (for build)
 RUN pnpm install
 
-# Generate Prisma Client BEFORE copying other files
+# Generate Prisma Client
 RUN npx prisma generate
 
 # Copy source code
@@ -33,16 +33,17 @@ COPY . .
 # Build application
 RUN pnpm run build
 
+# Prune dev dependencies (keep only production)
+RUN pnpm prune --prod
+
 # ============================================================================
 # Production stage
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Install pnpm, OpenSSL and wget
-RUN npm config set registry https://registry.npmmirror.com/ \
-  && npm install -g pnpm@9.12.2 \
-  && apk add --no-cache openssl wget
+# Install OpenSSL and wget only (NO pnpm needed here!)
+RUN apk add --no-cache openssl wget
 
 # Copy package files
 COPY package*.json pnpm-lock.yaml ./
@@ -50,17 +51,8 @@ COPY package*.json pnpm-lock.yaml ./
 # Copy Prisma schema
 COPY --from=builder /app/prisma ./prisma
 
-# Configure pnpm
-RUN pnpm config set registry https://registry.npmmirror.com/
-
-# Install ALL dependencies first (not --prod yet)
-RUN pnpm install
-
-# Generate Prisma Client
-RUN npx prisma generate
-
-# Copy Prisma client from builder (as backup)
-COPY --from=builder /app/node_modules/.pnpm ./node_modules/.pnpm
+# Copy production node_modules from builder (already pruned!)
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy built application
 COPY --from=builder /app/dist ./dist

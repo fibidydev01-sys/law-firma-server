@@ -1,5 +1,5 @@
 # ============================================================================
-# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION (FIXED)
+# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION (FIXED v2)
 # ============================================================================
 
 FROM node:20-alpine AS builder
@@ -26,7 +26,7 @@ RUN pnpm install --frozen-lockfile
 COPY prisma ./prisma/
 
 # Generate Prisma Client (now prisma CLI is available)
-RUN pnpm prisma generate
+RUN pnpm exec prisma generate
 
 # Copy source code
 COPY src ./src/
@@ -54,18 +54,17 @@ WORKDIR /app
 # Copy package files
 COPY --chown=node:node package.json pnpm-lock.yaml ./
 
+# Copy prisma schema
+COPY --chown=node:node prisma ./prisma/
+
 # Configure pnpm
 RUN pnpm config set registry https://registry.npmmirror.com/
 
-# Install production dependencies
+# Install production dependencies (including @prisma/client)
 RUN pnpm install --prod --frozen-lockfile
 
-# Copy prisma schema
-COPY --chown=node:node --from=builder /app/prisma ./prisma/
-
-# Copy generated Prisma Client from builder stage
-COPY --chown=node:node --from=builder /app/node_modules/.prisma ./node_modules/.prisma/
-COPY --chown=node:node --from=builder /app/node_modules/@prisma ./node_modules/@prisma/
+# Generate Prisma Client in production stage
+RUN pnpm exec prisma generate
 
 # Copy built application
 COPY --chown=node:node --from=builder /app/dist ./dist/

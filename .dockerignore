@@ -1,0 +1,93 @@
+# ============================================================================
+# .dockerignore - Firma Hukum PERARI
+# Prevent unnecessary files from being copied into Docker image
+# ============================================================================
+
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+.next
+out
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Uploads (will be mounted as volume)
+uploads/*
+!uploads/.gitkeep
+
+# Backups (will be mounted as volume)
+backups/*
+!backups/.gitkeep
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+*.sublime-*
+
+# OS files
+.DS_Store
+Thumbs.db
+.directory
+
+# Testing
+coverage
+.nyc_output
+*.test.ts
+*.spec.ts
+test/
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.circleci
+
+# Documentation
+README.md
+docs/
+*.md
+
+# Prisma
+prisma/migrations  # Migrations run at runtime, not at build time
+
+# Monitoring (config files only needed)
+monitoring/
+
+# Development tools
+justfile
+.editorconfig
+.eslintrc*
+.prettierignore
+
+# Temp files
+tmp/
+temp/
+.temp/

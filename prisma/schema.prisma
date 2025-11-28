@@ -1,0 +1,375 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                  String               @id @default(uuid())
+  email               String               @unique
+  password            String
+  nama_lengkap        String?
+  role                UserRole             @default(advokat)
+  jabatan             String?
+  nomor_kta           String?              @unique
+  nomor_berita_acara  String?
+  spesialisasi        String?
+  avatar_url          String?
+  telepon             String?
+  alamat              String?
+  is_active           Boolean              @default(true)
+  tanggal_bergabung   DateTime             @default(now())
+  created_at          DateTime             @default(now())
+  updated_at          DateTime             @updatedAt
+
+  // Google Drive OAuth fields
+  google_drive_access_token   String?
+  google_drive_refresh_token  String?
+  google_drive_token_expires  DateTime?
+  google_drive_connected      Boolean              @default(false)
+
+  // Relations
+  akses_portal_klien  AksesPortalKlien[]
+  catatan_perkara     CatatanPerkara[]
+  dokumen_diunggah    DokumenHukum[]       @relation("DokumenDiunggah")
+  folder_dibuat       FolderDokumen[]      @relation("FolderDibuat")
+  sidang_dibuat       JadwalSidang[]
+  klien_dibuat        Klien[]              @relation("KlienDibuat")
+  log_aktivitas       LogAktivitas[]
+  pemeriksaan_konflik PemeriksaanKonflik[]
+  perkara_dibuat      Perkara[]            @relation("PerkaraDibuat")
+  tim_perkara         TimPerkara[]
+  tugas_dibuat        Tugas[]              @relation("TugasDibuat")
+  tugas_ditugaskan    Tugas[]              @relation("TugasDitugaskan")
+
+  @@map("users")
+}
+
+model Klien {
+  id                     String             @id @default(uuid())
+  nama                   String
+  jenis_klien            String             @default("perorangan")
+  nomor_identitas        String?
+  npwp                   String?
+  email                  String?
+  telepon                String?
+  telepon_alternatif     String?
+  alamat                 String?
+  kelurahan              String?
+  kecamatan              String?
+  kota                   String?
+  provinsi               String?
+  kode_pos               String?
+  nama_perusahaan        String?
+  bentuk_badan_usaha     String?
+  nomor_akta             String?
+  nama_kontak_darurat    String?
+  telepon_kontak_darurat String?
+  catatan                String?
+  dibuat_oleh            String?
+  created_at             DateTime           @default(now())
+  updated_at             DateTime           @updatedAt
+  akses_portal           AksesPortalKlien[]
+  pembuat                User?              @relation("KlienDibuat", fields: [dibuat_oleh], references: [id])
+  perkara                Perkara[]
+
+  @@map("klien")
+}
+
+model Perkara {
+  id                        String               @id @default(uuid())
+  nomor_perkara             String               @unique
+  nomor_perkara_pengadilan  String?
+  judul                     String
+  deskripsi                 String?
+  klien_id                  String?
+  jenis_perkara             JenisPerkara
+  status                    StatusPerkara        @default(aktif)
+  prioritas                 PrioritasTugas       @default(sedang)
+  tingkat_pengadilan        String?
+  nama_pengadilan           String?
+  nomor_ruang_sidang        String?
+  nama_hakim_ketua          String?
+  nama_hakim_anggota_1      String?
+  nama_hakim_anggota_2      String?
+  nama_panitera             String?
+  posisi_klien              String?
+  pihak_lawan               String?
+  kuasa_hukum_lawan         String?
+  nilai_perkara             Decimal?             @db.Decimal(15, 2)
+  tanggal_register          DateTime?
+  tanggal_sidang_pertama    DateTime?
+  tanggal_sidang_berikutnya DateTime?
+  batas_waktu_banding       DateTime?
+  batas_waktu_kasasi        DateTime?
+  nilai_fee                 Decimal?             @db.Decimal(15, 2)
+  status_pembayaran         String?
+  catatan                   String?
+  dibuat_oleh               String?
+  created_at                DateTime             @default(now())
+  updated_at                DateTime             @updatedAt
+  catatan_perkara           CatatanPerkara[]
+  dokumen                   DokumenHukum[]
+  folders                   FolderDokumen[]
+  jadwal_sidang             JadwalSidang[]
+  pemeriksaan_konflik       PemeriksaanKonflik[]
+  pembuat                   User?                @relation("PerkaraDibuat", fields: [dibuat_oleh], references: [id])
+  klien                     Klien?               @relation(fields: [klien_id], references: [id])
+  tim_perkara               TimPerkara[]
+  tugas                     Tugas[]
+
+  @@map("perkara")
+}
+
+model JadwalSidang {
+  id                 String      @id @default(uuid())
+  perkara_id         String
+  jenis_sidang       JenisSidang
+  tanggal_sidang     DateTime
+  waktu_mulai        String?
+  waktu_selesai      String?
+  nama_pengadilan    String
+  nomor_ruang_sidang String?
+  nama_hakim         String?
+  lokasi_lengkap     String?
+  agenda_sidang      String?
+  hasil_sidang       String?
+  putusan            String?
+  catatan            String?
+  dibuat_oleh        String?
+  created_at         DateTime    @default(now())
+  updated_at         DateTime    @updatedAt
+  pembuat            User?       @relation(fields: [dibuat_oleh], references: [id])
+  perkara            Perkara     @relation(fields: [perkara_id], references: [id], onDelete: Cascade)
+
+  @@map("jadwal_sidang")
+}
+
+model Tugas {
+  id              String         @id @default(uuid())
+  perkara_id      String
+  judul           String
+  deskripsi       String?
+  ditugaskan_ke   String?
+  status          StatusTugas    @default(belum_mulai)
+  prioritas       PrioritasTugas @default(sedang)
+  tenggat_waktu   DateTime?
+  tanggal_selesai DateTime?
+  dapat_ditagih   Boolean        @default(false)
+  jam_kerja       Decimal?       @db.Decimal(5, 2)
+  tarif_per_jam   Decimal?       @db.Decimal(10, 2)
+  dibuat_oleh     String?
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+  pembuat         User?          @relation("TugasDibuat", fields: [dibuat_oleh], references: [id])
+  petugas         User?          @relation("TugasDitugaskan", fields: [ditugaskan_ke], references: [id])
+  perkara         Perkara        @relation(fields: [perkara_id], references: [id], onDelete: Cascade)
+
+  @@map("tugas")
+}
+
+model DokumenHukum {
+  id                String          @id @default(uuid())
+  perkara_id        String
+  folder_id         String?         // ✅ Virtual folder organization
+  nama_dokumen      String
+  kategori          KategoriDokumen
+  nomor_bukti       String?
+  file_path         String?         // ✅ Made nullable - legacy local files
+  google_drive_id   String?         // ✅ Google Drive file ID
+  google_drive_link String?         // ✅ Google Drive shareable link
+  embed_link        String?         // ✅ Google Drive embed preview link
+  ukuran_file       Int?
+  tipe_file         String?
+  versi             Int             @default(1)
+  diunggah_oleh     String?
+  tanggal_dokumen   DateTime?
+  tanggal_upload    DateTime        @default(now())
+  catatan           String?
+  pengunggah        User?           @relation("DokumenDiunggah", fields: [diunggah_oleh], references: [id])
+  perkara           Perkara         @relation(fields: [perkara_id], references: [id], onDelete: Cascade)
+  folder            FolderDokumen?  @relation(fields: [folder_id], references: [id], onDelete: SetNull)
+
+  @@map("dokumen_hukum")
+}
+
+model CatatanPerkara {
+  id            String   @id @default(uuid())
+  perkara_id    String
+  user_id       String?
+  catatan       String
+  dapat_ditagih Boolean  @default(false)
+  jam_kerja     Decimal? @db.Decimal(5, 2)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+  perkara       Perkara  @relation(fields: [perkara_id], references: [id], onDelete: Cascade)
+  user          User?    @relation(fields: [user_id], references: [id])
+
+  @@map("catatan_perkara")
+}
+
+model PemeriksaanKonflik {
+  id              String   @id @default(uuid())
+  perkara_id      String?
+  nama_klien      String
+  pihak_lawan     String
+  diperiksa_oleh  String?
+  ada_konflik     Boolean  @default(false)
+  detail_konflik  String?
+  tanggal_periksa DateTime @default(now())
+  pemeriksa       User?    @relation(fields: [diperiksa_oleh], references: [id])
+  perkara         Perkara? @relation(fields: [perkara_id], references: [id])
+
+  @@map("pemeriksaan_konflik")
+}
+
+model TimPerkara {
+  id                 String   @id @default(uuid())
+  perkara_id         String
+  user_id            String
+  peran              String?
+  tanggal_ditugaskan DateTime @default(now())
+  perkara            Perkara  @relation(fields: [perkara_id], references: [id], onDelete: Cascade)
+  user               User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([perkara_id, user_id])
+  @@map("tim_perkara")
+}
+
+model LogAktivitas {
+  id            String   @id @default(uuid())
+  user_id       String?
+  aksi          String
+  jenis_entitas String?
+  id_entitas    String?
+  detail        Json?
+  created_at    DateTime @default(now())
+  user          User?    @relation(fields: [user_id], references: [id])
+
+  @@map("log_aktivitas")
+}
+
+model AksesPortalKlien {
+  id             String    @id @default(uuid())
+  klien_id       String
+  user_id        String
+  token_akses    String?
+  is_aktif       Boolean   @default(true)
+  login_terakhir DateTime?
+  created_at     DateTime  @default(now())
+  klien          Klien     @relation(fields: [klien_id], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([klien_id, user_id])
+  @@map("akses_portal_klien")
+}
+
+// ============================================================================
+// MODEL: FOLDER DOKUMEN (Virtual Folder for Document Organization)
+// ============================================================================
+model FolderDokumen {
+  id             String           @id @default(uuid())
+  perkara_id     String
+  nama_folder    String
+  parent_id      String?          // For nested folders (subfolder support)
+  warna          String?          // Optional color for visual organization
+  icon           String?          // Optional icon name
+  urutan         Int              @default(0) // Custom sort order
+  dibuat_oleh    String?
+  created_at     DateTime         @default(now())
+  updated_at     DateTime         @updatedAt
+
+  // Relations
+  perkara        Perkara          @relation(fields: [perkara_id], references: [id], onDelete: Cascade)
+  pembuat        User?            @relation("FolderDibuat", fields: [dibuat_oleh], references: [id])
+  parent         FolderDokumen?   @relation("NestedFolder", fields: [parent_id], references: [id], onDelete: Cascade)
+  children       FolderDokumen[]  @relation("NestedFolder")
+  dokumen        DokumenHukum[]
+
+  // Indexes
+  @@index([perkara_id])
+  @@index([parent_id])
+  @@map("folder_dokumen")
+}
+
+enum UserRole {
+  admin
+  partner
+  advokat
+  paralegal
+  staff
+  klien
+}
+
+enum StatusPerkara {
+  aktif
+  pending
+  selesai
+  arsip
+}
+
+enum JenisPerkara {
+  perdata
+  pidana
+  keluarga
+  perusahaan
+  pertanahan
+  hki
+  ketenagakerjaan
+  pajak
+  tata_usaha_negara
+  niaga
+  lainnya
+}
+
+enum StatusTugas {
+  belum_mulai
+  sedang_berjalan
+  selesai
+}
+
+enum PrioritasTugas {
+  rendah
+  sedang
+  tinggi
+  mendesak
+}
+
+enum KategoriDokumen {
+  gugatan
+  permohonan
+  jawaban
+  replik
+  duplik
+  kesimpulan
+  memori_banding
+  kontra_memori
+  kasasi
+  bukti
+  surat_kuasa
+  kontrak
+  korespondensi
+  putusan
+  penetapan
+  berita_acara
+  invoice
+  lainnya
+}
+
+enum JenisSidang {
+  sidang_pertama
+  sidang_mediasi
+  sidang_pembuktian
+  sidang_kesimpulan
+  sidang_putusan
+  sidang_banding
+  sidang_kasasi
+  sidang_pk
+  eksekusi
+  lainnya
+}

@@ -1,0 +1,95 @@
+# ============================================================================
+# docker-compose.yml - Firma Hukum PERARI
+# Development Stack (PostgreSQL + API) - Redis via Upstash
+# ============================================================================
+
+services:
+  # ============================================================================
+  # PostgreSQL Database
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: firma-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: firma_hukum
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - firma-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Redis - DISABLED (Using Upstash Cloud)
+  # ============================================================================
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: firma-redis
+  #   ports:
+  #     - '6379:6379'
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - firma-network
+  #   restart: unless-stopped
+
+  # ============================================================================
+  # NestJS API with pnpm
+  # ============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NODE_ENV=development
+    container_name: firma-api
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    environment:
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - firma-network
+    volumes:
+      - ./src:/app/src:ro
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - /app/node_modules
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  # redis_data:  # Not needed anymore
+  #   driver: local
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  firma-network:
+    driver: bridge

@@ -1,5 +1,5 @@
 # ============================================================================
-# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION
+# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION (FIXED)
 # ============================================================================
 
 FROM node:20-alpine AS builder
@@ -19,16 +19,16 @@ COPY package.json pnpm-lock.yaml ./
 # Configure pnpm
 RUN pnpm config set registry https://registry.npmmirror.com/
 
-# Install dependencies
+# Install ALL dependencies (including prisma)
 RUN pnpm install --frozen-lockfile
 
-# Copy prisma
+# Copy prisma schema AFTER installing dependencies
 COPY prisma ./prisma/
 
-# Generate Prisma Client
+# Generate Prisma Client (now prisma CLI is available)
 RUN pnpm prisma generate
 
-# Copy source
+# Copy source code
 COPY src ./src/
 COPY tsconfig.json tsconfig.build.json nest-cli.json .prettierrc ./
 
@@ -57,14 +57,15 @@ COPY --chown=node:node package.json pnpm-lock.yaml ./
 # Configure pnpm
 RUN pnpm config set registry https://registry.npmmirror.com/
 
-# Install production dependencies only
+# Install production dependencies
 RUN pnpm install --prod --frozen-lockfile
 
-# Copy prisma
+# Copy prisma schema
 COPY --chown=node:node --from=builder /app/prisma ./prisma/
 
-# Generate Prisma Client
-RUN pnpm prisma generate
+# Copy generated Prisma Client from builder stage
+COPY --chown=node:node --from=builder /app/node_modules/.prisma ./node_modules/.prisma/
+COPY --chown=node:node --from=builder /app/node_modules/@prisma ./node_modules/@prisma/
 
 # Copy built application
 COPY --chown=node:node --from=builder /app/dist ./dist/

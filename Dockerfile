@@ -1,69 +1,71 @@
 # ============================================================================
-# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION (SIMPLIFIED)
+# DOCKERFILE - Firma Hukum PERARI Backend - PRODUCTION (PNPM VERSION)
 # ============================================================================
 
+# Build stage
 FROM node:20-alpine AS builder
-
-# Install pnpm and build dependencies
-RUN npm config set registry https://registry.npmmirror.com/ \
-  && npm install -g pnpm@9.12.2 \
-  && apk add --no-cache openssl wget bash
 
 WORKDIR /app
 
+# Install pnpm and OpenSSL
+RUN npm config set registry https://registry.npmmirror.com/ \
+  && npm install -g pnpm@9.12.2 \
+  && apk add --no-cache openssl
+
 # Copy package files
-COPY package.json pnpm-lock.yaml ./
+COPY package*.json pnpm-lock.yaml ./
 
 # Copy prisma schema FIRST
 COPY prisma ./prisma/
 
-# Configure pnpm registry
+# Configure pnpm
 RUN pnpm config set registry https://registry.npmmirror.com/
 
-# Install ALL dependencies
-RUN pnpm install --frozen-lockfile
+# Install dependencies
+RUN pnpm install
 
-# Generate Prisma Client
-RUN pnpm exec prisma generate
+# Generate Prisma Client BEFORE copying other files
+RUN npx prisma generate
 
 # Copy source code
-COPY src ./src/
-COPY tsconfig.json tsconfig.build.json nest-cli.json .prettierrc ./
+COPY . .
 
 # Build application
 RUN pnpm run build
 
 # ============================================================================
-# PRODUCTION STAGE
-# ============================================================================
+# Production stage
 FROM node:20-alpine
-
-# Install runtime dependencies
-RUN npm config set registry https://registry.npmmirror.com/ \
-  && npm install -g pnpm@9.12.2 \
-  && apk add --no-cache openssl wget bash
 
 WORKDIR /app
 
+# Install pnpm, OpenSSL and wget
+RUN npm config set registry https://registry.npmmirror.com/ \
+  && npm install -g pnpm@9.12.2 \
+  && apk add --no-cache openssl wget
+
 # Copy package files
-COPY package.json pnpm-lock.yaml ./
+COPY package*.json pnpm-lock.yaml ./
 
 # Copy Prisma schema
-COPY --from=builder /app/prisma ./prisma/
+COPY --from=builder /app/prisma ./prisma
 
 # Configure pnpm
 RUN pnpm config set registry https://registry.npmmirror.com/
 
-# Install production dependencies (including @prisma/client)
-RUN pnpm install --prod --frozen-lockfile
+# Install ALL dependencies first (not --prod yet)
+RUN pnpm install
 
-# Generate Prisma Client (fresh in production)
-RUN pnpm exec prisma generate
+# Generate Prisma Client
+RUN npx prisma generate
+
+# Copy Prisma client from builder (as backup)
+COPY --from=builder /app/node_modules/.pnpm ./node_modules/.pnpm
 
 # Copy built application
-COPY --from=builder /app/dist ./dist/
+COPY --from=builder /app/dist ./dist
 
-# Create runtime directories
+# Create directories
 RUN mkdir -p \
   /app/uploads/dokumen \
   /app/uploads/avatars \
@@ -86,4 +88,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
 
 # Start application with migrations
-CMD ["sh", "-c", "pnpm exec prisma db push --accept-data-loss && node dist/src/main.js"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/src/main.js"]

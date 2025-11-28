@@ -33,9 +33,6 @@ COPY . .
 # Build application
 RUN pnpm run build
 
-# Prune dev dependencies (keep only production)
-RUN pnpm prune --prod
-
 # ============================================================================
 # Production stage
 FROM node:20-alpine
@@ -53,10 +50,13 @@ COPY package*.json pnpm-lock.yaml ./
 # Copy Prisma schema
 COPY --from=builder /app/prisma ./prisma
 
-# Copy production node_modules from builder (already pruned!)
-COPY --from=builder /app/node_modules ./node_modules
+# Configure pnpm
+RUN pnpm config set registry https://registry.npmmirror.com/
 
-# Copy built application
+# Install production dependencies only
+RUN pnpm install --prod --frozen-lockfile
+
+# Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
 # Create directories
